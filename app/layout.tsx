@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AnonChat | Private chats that disappear",
+  title: "Vault | Private chats that disappear",
   description:
     "Create anonymous real-time chat rooms with no login, 10-minute auto-deletion, and instant destroy control.",
 };

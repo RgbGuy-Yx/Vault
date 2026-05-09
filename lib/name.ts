@@ -1,21 +1,32 @@
-export function generateAnonName(): string {
-  const adjectives = ["Happy", "Quiet", "Bright", "Dark", "Fast", "Slow", "Brave", "Calm", "Cool", "Swift", "Wild"];
-  const nouns = ["Panda", "Fox", "Bear", "Cat", "Dog", "Bird", "Wolf", "Tiger", "Lion", "Shark", "Hawk"];
-  
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  const num = Math.floor(Math.random() * 1000);
-  
-  return `${adj}${noun}${num}`;
+const roomPrefixes = ["cypher", "cipher", "signal", "vault", "relay", "lattice"];
+const participantPrefixes = ["ghost", "ember", "nova", "drift", "atlas", "vector"];
+
+function randomInt(max: number): number {
+  if (max <= 0) {
+    return 0;
+  }
+
+  const crypto = globalThis.crypto;
+  if (crypto && typeof crypto.getRandomValues === "function") {
+    const value = new Uint32Array(1);
+    crypto.getRandomValues(value);
+    return value[0] % max;
+  }
+
+  return Math.floor(Math.random() * max);
 }
 
-export function getOrGenerateName(): string {
-  if (typeof window === "undefined") return "Anonymous"; // SSR check
-  
-  let name = localStorage.getItem("anon_name");
-  if (!name) {
-    name = generateAnonName();
-    localStorage.setItem("anon_name", name);
-  }
-  return name;
+export function generateCodeName(prefixes: string[] = roomPrefixes): string {
+  const prefix = prefixes[randomInt(prefixes.length)] ?? roomPrefixes[0];
+  const suffix = String(randomInt(10_000)).padStart(4, "0");
+
+  return `${prefix}_${suffix}`;
+}
+
+export function generateRoomCodeName(): string {
+  return generateCodeName(roomPrefixes);
+}
+
+export function generateParticipantName(): string {
+  return generateCodeName(participantPrefixes);
 }

@@ -1,7 +1,0 @@
-{
-  "status": "init",
-  "scope": "diff",
-  "type": "frontend",
-  "localEndpoint": "http://localhost:3000/",
-  "serverPort": 51679
-}

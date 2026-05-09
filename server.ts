@@ -21,11 +21,29 @@ void app.prepare().then(() => {
   const handleUpgrade = app.getUpgradeHandler();
 
   const server = createServer((req, res) => {
+    if (req.method === "POST" && req.url?.includes("/api/ws/internal/destroy")) {
+      let body = "";
+      req.on("data", chunk => body += chunk.toString());
+      req.on("end", () => {
+        try {
+          const { roomId } = JSON.parse(body);
+          if (roomId) {
+            void getWsHub().then(({ roomWsHub }) => roomWsHub.notifyRoomDestroyed(roomId));
+          }
+        } catch (err) {
+          console.error("Internal destroy hook error", err);
+        }
+        res.statusCode = 200;
+        res.end("OK");
+      });
+      return;
+    }
+
     void handle(req, res);
   });
 
   server.on("upgrade", (req, socket, head) => {
-    if (req.url?.startsWith("/api/ws")) {
+    if (req.url?.includes("/api/ws")) {
       void getWsHub()
         .then(({ roomWsHub }) => {
           roomWsHub.handleUpgrade(req, socket, head);

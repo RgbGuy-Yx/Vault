@@ -118,7 +118,7 @@ export default function Home() {
       >
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4">
           <div className="flex items-center gap-8">
-            <p className="font-[var(--font-space-grotesk)] text-sm text-[#ff5248]">AnonChat</p>
+            <p className="font-[var(--font-space-grotesk)] text-sm text-[#ff5248]">Vault</p>
             <nav className="hidden items-center gap-6 text-[10px] uppercase tracking-[0.16em] text-zinc-500 md:flex">
               <a href="#how" className="hover:text-zinc-200">
                 How it works

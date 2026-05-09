@@ -33,14 +33,22 @@ type ErrorMessage = {
 type RoomState = {
   createdAt?: string;
   destroyed?: string;
+  roomName?: string;
+};
+
+type RoomStatus = "active" | "destroyed" | "expired" | "missing";
+
+type SocketEntry = {
+  roomId: string;
+  clientId: string;
 };
 
 class RoomWebSocketHub {
-  private readonly roomClients = new Map<string, Set<WebSocket>>();
-  private readonly socketRoom = new WeakMap<WebSocket, string>();
+  private readonly roomClients = new Map<string, Map<string, WebSocket>>();
+  private readonly socketRoom = new WeakMap<WebSocket, SocketEntry>();
   private readonly closedRooms = new Map<string, "destroyed" | "expired">();
   private readonly expiryTimers = new Map<string, NodeJS.Timeout>();
-  private messageSequence = 0;
+  private readonly messageSequences = new Map<string, number>();
 
   constructor(private readonly wss: WebSocketServer) {
     this.wss.on("connection", (socket, req) => {
@@ -66,9 +74,38 @@ class RoomWebSocketHub {
     this.closeRoom(roomId, "expired");
   }
 
+  private async resolveRoomStatus(roomId: string): Promise<RoomStatus> {
+    const closedReason = this.closedRooms.get(roomId);
+    if (closedReason) {
+      return closedReason;
+    }
+
+    const room = await this.getRoomState(roomId);
+    if (!room) {
+      return "missing";
+    }
+
+    if (String(room.destroyed) === "true") {
+      return "destroyed";
+    }
+
+    const createdAt = Number(room.createdAt);
+    if (!Number.isFinite(createdAt)) {
+      return "missing";
+    }
+
+    const expiresAt = createdAt + 10 * 60 * 1000;
+    if (expiresAt <= Date.now()) {
+      return "expired";
+    }
+
+    return "active";
+  }
+
   private closeRoom(roomId: string, reason: "destroyed" | "expired"): void {
     this.closedRooms.set(roomId, reason);
     this.clearExpiryTimer(roomId);
+    this.messageSequences.delete(roomId);
 
     const clients = this.roomClients.get(roomId);
     if (!clients || clients.size === 0) {
@@ -78,7 +115,7 @@ class RoomWebSocketHub {
 
     const payload: DestroyedMessage | ExpiredMessage =
       reason === "destroyed" ? { type: "DESTROYED" } : { type: "EXPIRED" };
-    for (const client of clients) {
+    for (const client of clients.values()) {
       this.safeSend(client, payload);
       this.socketRoom.delete(client);
       client.close(1000, reason === "destroyed" ? "Room destroyed" : "Room expired");
@@ -88,25 +125,46 @@ class RoomWebSocketHub {
   }
 
   private async handleConnection(socket: WebSocket, req: IncomingMessage) {
+    console.log("WS CONNECTION ATTEMPT:", req.url);
     try {
-      const roomId = this.extractRoomId(req.url ?? "");
-      if (!roomId) {
+      const connection = this.extractConnection(req.url ?? "");
+      if (!connection) {
         this.safeSend(socket, { type: "ERROR", message: "Invalid roomId" });
         socket.close(1008, "Invalid roomId");
         return;
       }
 
+      const { roomId, clientId } = connection;
+
+      const messageQueue: string[] = [];
+      let isReady = false;
+
+      socket.on("message", (raw) => {
+        if (!isReady) {
+          messageQueue.push(raw.toString());
+        } else {
+          void this.handleClientMessage(socket, roomId, raw.toString());
+        }
+      });
+
       const closedReason = this.closedRooms.get(roomId);
-      if (closedReason) {
-        this.safeSend(
-          socket,
-          closedReason === "destroyed" ? { type: "DESTROYED" } : { type: "EXPIRED" },
-        );
-        socket.close(1008, "Room unavailable");
+      if (closedReason === "destroyed") {
+        this.notifyRoomDestroyed(roomId);
+        this.safeSend(socket, { type: "DESTROYED" });
+        socket.close(1008, "Room destroyed");
         return;
       }
 
+      if (closedReason === "expired") {
+        this.notifyRoomExpired(roomId);
+        this.safeSend(socket, { type: "EXPIRED" });
+        socket.close(1008, "Room expired");
+        return;
+      }
+
+      console.log("Fetching room state for", roomId);
       const room = await this.getRoomState(roomId);
+      console.log("Got room state:", room);
       if (!room) {
         this.notifyRoomExpired(roomId);
         this.safeSend(socket, { type: "EXPIRED" });
@@ -114,19 +172,31 @@ class RoomWebSocketHub {
         return;
       }
 
-      if (room.destroyed === "true") {
+      this.scheduleRoomExpiry(roomId, room);
+      this.addClient(roomId, clientId, socket);
+      console.log("Added client", clientId, "to room", roomId);
+
+      const postJoinStatus = await this.resolveRoomStatus(roomId);
+      if (postJoinStatus === "destroyed") {
         this.notifyRoomDestroyed(roomId);
         this.safeSend(socket, { type: "DESTROYED" });
-        socket.close(1008, "Room unavailable");
+        this.removeClient(socket);
+        socket.close(1008, "Room destroyed");
         return;
       }
 
-      this.scheduleRoomExpiry(roomId, room);
-      this.addClient(roomId, socket);
+      if (postJoinStatus === "expired" || postJoinStatus === "missing") {
+        this.notifyRoomExpired(roomId);
+        this.safeSend(socket, { type: "EXPIRED" });
+        this.removeClient(socket);
+        socket.close(1008, "Room expired");
+        return;
+      }
 
-      socket.on("message", (raw) => {
-        void this.handleClientMessage(socket, roomId, raw.toString());
-      });
+      isReady = true;
+      for (const msg of messageQueue) {
+        void this.handleClientMessage(socket, roomId, msg);
+      }
 
       socket.on("close", () => {
         this.removeClient(socket);
@@ -150,36 +220,67 @@ class RoomWebSocketHub {
     roomId: string,
     raw: string,
   ) {
-    const payload = this.parseClientMessage(raw);
-    if (!payload) {
-      this.safeSend(socket, {
-        type: "ERROR",
-        message: "Invalid message payload",
+    const entry = this.socketRoom.get(socket);
+    if (!entry) return;
+
+    const { clientId } = entry;
+    const redis = getRedis();
+
+    // 1. Rate Limiting (max 5 msgs per 2 seconds)
+    const rateKey = `ratelimit:${roomId}:${clientId}`;
+    const count = await redis.incr(rateKey);
+    if (count === 1) {
+      await redis.expire(rateKey, 2);
+    }
+
+    if (count > 5) {
+      this.safeSend(socket, { 
+        type: "ERROR", 
+        message: "You are sending messages too fast. Slow down!" 
       });
       return;
     }
 
-    const closedReason = this.closedRooms.get(roomId);
-    if (closedReason) {
-      this.safeSend(socket, closedReason === "destroyed" ? { type: "DESTROYED" } : { type: "EXPIRED" });
-      socket.close(1008, "Room closed");
-      return;
-    }
-
-    // One Redis call per user message to detect TTL expiry or room destruction.
-    const room = await this.getRoomState(roomId);
-    if (!room) {
-      this.notifyRoomExpired(roomId);
-      return;
-    }
-
-    if (room.destroyed === "true") {
+    // 2. Room Status Check
+    const roomStatus = await this.resolveRoomStatus(roomId);
+    if (roomStatus === "destroyed") {
       this.safeSend(socket, { type: "DESTROYED" });
       this.notifyRoomDestroyed(roomId);
+      this.removeClient(socket);
+      socket.close(1008, "Room destroyed");
       return;
     }
 
-    if (this.closedRooms.has(roomId)) {
+    if (roomStatus === "expired" || roomStatus === "missing") {
+      this.safeSend(socket, { type: "EXPIRED" });
+      this.notifyRoomExpired(roomId);
+      this.removeClient(socket);
+      socket.close(1008, "Room expired");
+      return;
+    }
+
+    // 3. Message Validation
+    const payload = this.parseClientMessage(raw);
+    if (!payload) {
+      this.safeSend(socket, { type: "ERROR", message: "Invalid payload or message too long" });
+      return;
+    }
+
+    // Re-check Redis immediately before broadcasting
+    const latestRoomStatus = await this.resolveRoomStatus(roomId);
+    if (latestRoomStatus === "destroyed") {
+      this.safeSend(socket, { type: "DESTROYED" });
+      this.notifyRoomDestroyed(roomId);
+      this.removeClient(socket);
+      socket.close(1008, "Room destroyed");
+      return;
+    }
+
+    if (latestRoomStatus === "expired" || latestRoomStatus === "missing") {
+      this.safeSend(socket, { type: "EXPIRED" });
+      this.notifyRoomExpired(roomId);
+      this.removeClient(socket);
+      socket.close(1008, "Room expired");
       return;
     }
 
@@ -201,35 +302,44 @@ class RoomWebSocketHub {
       return;
     }
 
-    for (const client of clients) {
+    for (const client of clients.values()) {
       this.safeSend(client, payload);
     }
   }
 
-  private addClient(roomId: string, socket: WebSocket) {
-    const clients = this.roomClients.get(roomId) ?? new Set<WebSocket>();
-    clients.add(socket);
+  private addClient(roomId: string, clientId: string, socket: WebSocket) {
+    const clients = this.roomClients.get(roomId) ?? new Map<string, WebSocket>();
+    const existingSocket = clients.get(clientId);
+    if (existingSocket && existingSocket !== socket) {
+      this.socketRoom.delete(existingSocket);
+      existingSocket.close(1000, "Replaced");
+    }
+
+    clients.set(clientId, socket);
     this.roomClients.set(roomId, clients);
-    this.socketRoom.set(socket, roomId);
+    this.socketRoom.set(socket, { roomId, clientId });
   }
 
   private removeClient(socket: WebSocket) {
-    const roomId = this.socketRoom.get(socket);
-    if (!roomId) {
+    const entry = this.socketRoom.get(socket);
+    if (!entry) {
       return;
     }
 
-    const clients = this.roomClients.get(roomId);
+    const clients = this.roomClients.get(entry.roomId);
     if (!clients) {
       this.socketRoom.delete(socket);
       return;
     }
 
-    clients.delete(socket);
+    const currentSocket = clients.get(entry.clientId);
+    if (currentSocket === socket) {
+      clients.delete(entry.clientId);
+    }
     this.socketRoom.delete(socket);
 
     if (clients.size === 0) {
-      this.roomClients.delete(roomId);
+      this.roomClients.delete(entry.roomId);
     }
   }
 
@@ -278,6 +388,22 @@ class RoomWebSocketHub {
     return roomId;
   }
 
+  private extractConnection(requestUrl: string): { roomId: string; clientId: string } | null {
+    const url = new URL(requestUrl, "http://localhost");
+    const roomId = url.searchParams.get("roomId")?.trim();
+    const clientId = url.searchParams.get("clientId")?.trim();
+
+    if (!roomId || roomId.length !== 8) {
+      return null;
+    }
+
+    if (!clientId || clientId.length === 0) {
+      return null;
+    }
+
+    return { roomId, clientId };
+  }
+
   private parseClientMessage(raw: string): { text: string; name: string } | null {
     try {
       const parsed = JSON.parse(raw) as ClientMessage;
@@ -293,7 +419,7 @@ class RoomWebSocketHub {
       const text = parsed.text.trim();
       const name = parsed.name.trim();
 
-      if (text.length === 0 || name.length === 0) {
+      if (text.length === 0 || text.length > 1000 || name.length === 0 || name.length > 64) {
         return null;
       }
 
@@ -314,8 +440,9 @@ class RoomWebSocketHub {
   }
 
   private nextMessageId(roomId: string): string {
-    this.messageSequence += 1;
-    return `${roomId}:${Date.now()}:${this.messageSequence}`;
+    const nextSequence = (this.messageSequences.get(roomId) ?? 0) + 1;
+    this.messageSequences.set(roomId, nextSequence);
+    return `${roomId}:${Date.now()}:${nextSequence}`;
   }
 
   private safeSend(

@@ -9,6 +9,7 @@ type DestroyBody = {
 type RoomState = {
   createdAt?: string;
   destroyed?: string;
+  roomName?: string;
 };
 
 const DESTROY_TOMBSTONE_SECONDS = 600;
@@ -50,27 +51,47 @@ export async function POST(request: NextRequest) {
 
     const room = await redis.hgetall<RoomState>(`room:${roomId}`);
     if (!room || Object.keys(room).length === 0) {
-      notifyRoomDestroyed(roomId);
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
-    if (room.destroyed === "true") {
-      notifyRoomDestroyed(roomId);
+    const triggerWebhook = async () => {
+      try {
+        const host = process.env.NODE_ENV === "development"
+          ? "127.0.0.1:3000"
+          : request.headers.get("host") || "127.0.0.1:3000";
+        const protocol = request.headers.get("x-forwarded-proto") || "http";
+        await fetch(`${protocol}://${host}/api/ws/internal/destroy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId }),
+        });
+      } catch (err) {
+        console.error("Failed to trigger webhook", err);
+      }
+    };
+
+    if (String(room.destroyed) === "true") {
+      await triggerWebhook();
       return NextResponse.json({ ok: true });
     }
 
     const roomKey = `room:${roomId}`;
     const messagesKey = `room:${roomId}:messages`;
     const usersKey = `room:${roomId}:users`;
+    const roomCodeKey = room.roomName?.trim() ? `room-code:${room.roomName.trim()}` : null;
 
-    notifyRoomDestroyed(roomId);
-
-    await redis
+    const transaction = redis
       .multi()
       .hset(roomKey, { destroyed: "true" })
       .expire(roomKey, DESTROY_TOMBSTONE_SECONDS)
-      .del(messagesKey, usersKey)
-      .exec();
+      .del(messagesKey, usersKey);
+
+    if (roomCodeKey) {
+      transaction.del(roomCodeKey);
+    }
+
+    await transaction.exec();
+    await triggerWebhook();
 
     return NextResponse.json({ ok: true });
   } catch (error) {

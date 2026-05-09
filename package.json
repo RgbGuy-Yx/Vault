@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server.ts",
+    "dev": "cross-env NODE_ENV=development tsx dev-server.ts",
     "dev:ws": "cross-env NODE_ENV=development tsx server.ts",
     "dev:next": "next dev",
     "build": "next build",
@@ -13,7 +13,9 @@
   "dependencies": {
     "@upstash/redis": "^1.37.0",
     "cross-env": "^10.1.0",
+    "dotenv": "^17.4.2",
     "framer-motion": "^12.38.0",
+    "http-proxy": "^1.18.1",
     "nanoid": "^5.1.9",
     "next": "^16.2.4",
     "react": "^19.2.5",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/http-proxy": "^1.17.17",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

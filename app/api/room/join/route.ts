@@ -1,28 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRedis } from "@/lib/redis";
+import { generateRoomCodeName } from "@/lib/name";
 
 type JoinBody = {
   roomId?: unknown;
+  roomCode?: unknown;
 };
 
 type RoomState = {
   createdAt?: string;
   destroyed?: string;
+  roomName?: string;
 };
 
 const ROOM_TTL_MS = 10 * 60 * 1000;
 
-function validateJoinBody(body: JoinBody): string | null {
-  if (typeof body.roomId !== "string") {
-    return null;
+function resolveJoinTarget(body: JoinBody): { roomId?: string; roomCode?: string } | null {
+  if (typeof body.roomId === "string") {
+    const roomId = body.roomId.trim();
+    if (roomId.length === 8) {
+      return { roomId };
+    }
   }
 
-  const roomId = body.roomId.trim();
-  if (roomId.length !== 8) {
-    return null;
+  if (typeof body.roomCode === "string") {
+    const roomCode = body.roomCode.trim();
+    if (roomCode.length > 0) {
+      return { roomCode };
+    }
   }
 
-  return roomId;
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -39,12 +47,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const roomId = validateJoinBody(body);
-    if (!roomId) {
+    const target = resolveJoinTarget(body);
+    if (!target) {
       return NextResponse.json(
-        { error: "roomId must be a string of length 8" },
+        { error: "roomCode must be provided" },
         { status: 400 },
       );
+    }
+
+    let roomId = target.roomId;
+    if (!roomId && target.roomCode) {
+      // Try lowercase for the pretty room name lookup (e.g. signal_1234)
+      const mappedRoomId = await redis.get<string>(`room-code:${target.roomCode.toLowerCase()}`);
+      if (mappedRoomId) {
+        roomId = mappedRoomId;
+      } else if (target.roomCode.length === 8) {
+        // Fallback: the "code" provided might actually be a raw roomId (case sensitive)
+        roomId = target.roomCode;
+      } else {
+        return NextResponse.json({ error: "Room not found" }, { status: 404 });
+      }
+    }
+
+    if (!roomId) {
+      return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
     const room = await redis.hgetall<RoomState>(`room:${roomId}`);
@@ -52,7 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
-    if (room.destroyed === "true") {
+    if (String(room.destroyed) === "true") {
       return NextResponse.json({ error: "Room is destroyed" }, { status: 410 });
     }
 
@@ -62,7 +88,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Room expired" }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, expiresAt });
+    const roomCode = room.roomName?.trim() || generateRoomCodeName();
+    if (!room.roomName?.trim()) {
+      await redis
+        .multi()
+        .hset(`room:${roomId}`, { roomName: roomCode })
+        .set(`room-code:${roomCode}`, roomId)
+        .expire(`room-code:${roomCode}`, ROOM_TTL_MS / 1000)
+        .exec();
+    }
+
+    return NextResponse.json({ ok: true, expiresAt, roomId, roomCode });
   } catch (error) {
     console.error("Failed to join room", error);
     return NextResponse.json({ error: "Failed to join room" }, { status: 500 });
