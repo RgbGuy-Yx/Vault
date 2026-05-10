@@ -220,13 +220,10 @@ export function useChat(roomId: string) {
       reconnectAttemptsRef.current = 0;
       syncActiveFlags("active", "CONNECTING");
 
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const wsHost =
-        process.env.NODE_ENV === "development" && window.location.port === "3001"
-          ? `${window.location.hostname}:3000`
-          : window.location.host;
+      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 
+        (`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`);
       const socket = new WebSocket(
-        `${protocol}://${wsHost}/api/ws?roomId=${roomId}&clientId=${clientIdRef.current}`,
+        `${baseUrl}/api/ws?roomId=${roomId}&clientId=${clientIdRef.current}`,
       );
       closingRef.current = false;
       socketRef.current = socket;
