@@ -206,7 +206,7 @@ export default function Home() {
               maxLength={8}
               disabled={loading}
               autoComplete="off"
-              placeholder="Enter room code"
+              placeholder="Enter Room ID"
               className="h-12 flex-1 border border-[#32363d] bg-[#0d1015] px-4 text-sm tracking-[0.08em] text-zinc-200 placeholder:text-zinc-500 focus:border-[#ff5248] focus:outline-none"
             />
             <button

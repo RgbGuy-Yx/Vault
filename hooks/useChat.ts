@@ -104,7 +104,6 @@ export function useChat(roomId: string) {
   const [roomState, setRoomState] = useState<RoomState>(isInvalidRoom ? "invalid" : "checking");
   const [connectionState, setConnectionState] = useState<ConnectionState>(isInvalidRoom ? "INVALID" : "CONNECTING");
   const [statusText, setStatusText] = useState(isInvalidRoom ? "Invalid room link" : "Checking room...");
-  const [roomCode, setRoomCode] = useState<string>(roomId);
   const [guestName, setGuestName] = useState("guest");
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [remainingMs, setRemainingMs] = useState(0);
@@ -222,7 +221,6 @@ export function useChat(roomId: string) {
         return;
       }
 
-      setRoomCode(roomId);
       setExpiresAt(nextExpiresAt);
       setRemainingMs(Math.max(0, nextExpiresAt - Date.now()));
       reconnectAttemptsRef.current = 0;
@@ -465,7 +463,6 @@ export function useChat(roomId: string) {
     roomState,
     connectionState,
     statusText,
-    roomCode,
     guestName,
     expiresAt,
     remainingMs,

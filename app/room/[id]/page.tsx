@@ -28,7 +28,6 @@ export default function RoomPage() {
     roomState,
     connectionState,
     statusText,
-    roomCode,
     guestName,
     remainingMs,
     sendMessage: sendChatMessage,
@@ -64,7 +63,7 @@ export default function RoomPage() {
   }, []);
 
   const copyRoomCode = useCallback(async () => {
-    const currentRoomCode = roomCode?.trim() || roomId;
+    const currentRoomCode = roomId;
 
     if (!currentRoomCode) {
       return;
@@ -77,7 +76,7 @@ export default function RoomPage() {
     } catch {
       setDidCopyCode(false);
     }
-  }, [roomCode, roomId]);
+  }, [roomId]);
 
   useEffect(() => {
     stickToBottomRef.current = stickToBottom;
@@ -213,7 +212,7 @@ export default function RoomPage() {
                 <span className="text-[#ff3434]">Secure_Pipe_001</span>
                 <span className="hidden text-emerald-500 md:inline">Latency: 12ms</span>
                 <span className="truncate text-zinc-600">
-                  {roomCode ? roomCode.toUpperCase() : `Room_${roomId.toUpperCase()}`}
+                  {`Room_${roomId.toUpperCase()}`}
                 </span>
               </div>
               <div className="flex items-center gap-2 px-4 pb-3 md:px-6 md:pb-0">
@@ -224,7 +223,7 @@ export default function RoomPage() {
                   onClick={copyRoomCode}
                   className="lg:hidden border border-[#3b1111] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434] active:bg-[#ff3434] active:text-black"
                 >
-                  {didCopyCode ? "Copied" : "Copy Code"}
+                  {didCopyCode ? "Copied" : "Copy ID"}
                 </button>
               </div>
             </div>
@@ -391,21 +390,21 @@ export default function RoomPage() {
                 <div className="mt-5 space-y-5">
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-700">
-                      Room_Code
+                      Room_ID
                     </p>
                     <p
                       className="mt-1 text-xl text-zinc-100"
                       suppressHydrationWarning
                       style={{ fontFamily: "var(--font-space-grotesk)" }}
                     >
-                      {roomCode || roomId}
+                      {roomId}
                     </p>
                     <button
                       onClick={copyRoomCode}
-                      disabled={!roomCode && !roomId}
+                      disabled={!roomId}
                       className="mt-3 inline-flex h-10 items-center justify-center border border-[#3b1111] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#ff3434] transition-colors hover:border-[#ff3434] hover:bg-[#ff3434]/10 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {didCopyCode ? "Copied" : "Copy Code"}
+                      {didCopyCode ? "Copied" : "Copy ID"}
                     </button>
                   </div>
                   <div>

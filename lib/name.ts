@@ -1,4 +1,3 @@
-const roomPrefixes = ["cypher", "cipher", "signal", "vault", "relay", "lattice"];
 const participantPrefixes = ["ghost", "ember", "nova", "drift", "atlas", "vector"];
 
 function randomInt(max: number): number {
@@ -16,15 +15,11 @@ function randomInt(max: number): number {
   return Math.floor(Math.random() * max);
 }
 
-export function generateCodeName(prefixes: string[] = roomPrefixes): string {
-  const prefix = prefixes[randomInt(prefixes.length)] ?? roomPrefixes[0];
+export function generateCodeName(prefixes: string[]): string {
+  const prefix = prefixes[randomInt(prefixes.length)] ?? prefixes[0];
   const suffix = String(randomInt(10_000)).padStart(4, "0");
 
   return `${prefix}_${suffix}`;
-}
-
-export function generateRoomCodeName(): string {
-  return generateCodeName(roomPrefixes);
 }
 
 export function generateParticipantName(): string {
