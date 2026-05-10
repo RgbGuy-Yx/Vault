@@ -315,7 +315,9 @@ export function useChat(roomId: string) {
       });
 
       socket.addEventListener("close", (event) => {
-        if (socketRef.current === socket) {
+        const isCurrentSocket = socketRef.current === socket;
+
+        if (isCurrentSocket) {
           socketRef.current = null;
         }
 
@@ -335,6 +337,12 @@ export function useChat(roomId: string) {
         }
 
         if (event.reason === "Replaced") {
+          return;
+        }
+
+        // Prevent stale sockets from triggering a reconnect cascade
+        // This handles cases where a proxy swallows the "Replaced" close reason
+        if (!isCurrentSocket) {
           return;
         }
 
