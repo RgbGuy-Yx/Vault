@@ -40,9 +40,12 @@ export default function RoomPage() {
   const [stickToBottom, setStickToBottom] = useState(true);
   const [hasUnread, setHasUnread] = useState(false);
   const [didCopyCode, setDidCopyCode] = useState(false);
+  const [showWarningPopup, setShowWarningPopup] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const warned2MinRef = useRef(false);
+  const warned30SecRef = useRef(false);
 
   const dangerLevel =
     remainingMs <= 30 * 1000 ? "critical" : remainingMs <= 2 * 60 * 1000 ? "warning" : "normal";
@@ -50,12 +53,14 @@ export default function RoomPage() {
   const inputDisabled = roomState !== "active" || connectionState !== "CONNECTED";
 
   const scrollToBottom = useCallback(() => {
-    const node = scrollRef.current;
-    if (!node) return;
+    setTimeout(() => {
+      const node = scrollRef.current;
+      if (!node) return;
 
-    node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
-    setHasUnread(false);
-    setStickToBottom(true);
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+      setHasUnread(false);
+      setStickToBottom(true);
+    }, 100);
   }, []);
 
   const copyRoomCode = useCallback(async () => {
@@ -77,17 +82,35 @@ export default function RoomPage() {
   useEffect(() => {
     stickToBottomRef.current = stickToBottom;
   }, [stickToBottom]);
+
+  const prevMessagesLengthRef = useRef(messages.length);
   useEffect(() => {
-    if (stickToBottom) {
-      scrollToBottom();
+    if (messages.length > prevMessagesLengthRef.current) {
+      if (stickToBottomRef.current) {
+        scrollToBottom();
+      } else {
+        setHasUnread(true);
+      }
     }
-  }, [messages, scrollToBottom, stickToBottom]);
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
     if (roomState !== "active") {
       setShowDestroyConfirm(false);
+      return;
     }
-  }, [roomState]);
+
+    if (remainingMs <= 2 * 60 * 1000 && remainingMs > 30 * 1000 && !warned2MinRef.current) {
+      warned2MinRef.current = true;
+      setShowWarningPopup("WARNING: Session terminates in 2 minutes.");
+      setTimeout(() => setShowWarningPopup(null), 5000);
+    } else if (remainingMs <= 30 * 1000 && remainingMs > 0 && !warned30SecRef.current) {
+      warned30SecRef.current = true;
+      setShowWarningPopup("CRITICAL: Session terminates in 30 seconds.");
+      setTimeout(() => setShowWarningPopup(null), 5000);
+    }
+  }, [remainingMs, roomState]);
 
   const handleScroll = () => {
     const node = scrollRef.current;
@@ -132,8 +155,8 @@ export default function RoomPage() {
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-black text-white">
-      <div className="flex min-h-screen flex-col">
+    <main className="h-[100dvh] w-full overflow-hidden bg-black text-white">
+      <div className="flex h-full flex-col">
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#3b1111] bg-black px-4 md:px-6">
           <div className="flex h-full items-center gap-8">
             <p
@@ -197,6 +220,12 @@ export default function RoomPage() {
                 <span className="border border-[#3b1111] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">
                   {statusText}
                 </span>
+                <button
+                  onClick={copyRoomCode}
+                  className="lg:hidden border border-[#3b1111] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434] active:bg-[#ff3434] active:text-black"
+                >
+                  {didCopyCode ? "Copied" : "Copy Code"}
+                </button>
               </div>
             </div>
 
@@ -205,12 +234,12 @@ export default function RoomPage() {
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-600">
                   Expires_In
                 </span>
-                <span className="text-3xl text-[#ff3434]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                <span className={`text-3xl text-[#ff3434] ${dangerLevel === "critical" ? "animate-pulse font-bold" : ""}`} style={{ fontFamily: "var(--font-space-grotesk)" }}>
                   {formatClock(remainingMs)}
                 </span>
               </div>
               <div className="h-1 bg-[#221010]">
-                <div className="h-full bg-[#ff3434]" style={{ width: `${progress}%` }} />
+                <div className={`h-full ${dangerLevel === "warning" ? "bg-amber-300" : "bg-[#ff3434]"}`} style={{ width: `${progress}%` }} />
               </div>
               <button
                 onClick={() => setShowDestroyConfirm(true)}
@@ -235,7 +264,7 @@ export default function RoomPage() {
                   <>
                     <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-12 md:px-8">
                       {messages.length === 0 ? (
-                        <div className="flex min-h-full items-center justify-center text-center">
+                        <div className="flex min-h-full items-center justify-center text-center animate-in">
                           <div className="max-w-md border border-[#3b1111] bg-black/70 p-8">
                             <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff3434]">
                               Awaiting_Input
@@ -258,12 +287,12 @@ export default function RoomPage() {
                             message.system ? (
                               <p
                                 key={message.id}
-                                className="mx-auto w-fit border border-[#3b1111] bg-black/80 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434]"
+                                className="mx-auto w-fit border border-[#3b1111] bg-black/80 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434] animate-fade-in"
                               >
                                 {message.body}
                               </p>
                             ) : (
-                              <div key={message.id} className={message.mine ? "flex justify-end" : "flex justify-start"}>
+                              <div key={message.id} className={`animate-slide-up ${message.mine ? "flex justify-end" : "flex justify-start"}`}>
                                 <article
                                   className={`max-w-[82%] md:max-w-[72%] ${message.mine ? "text-right" : "text-left"
                                     }`}
@@ -301,14 +330,14 @@ export default function RoomPage() {
                     {hasUnread && (
                       <button
                         onClick={scrollToBottom}
-                        className="mx-auto mb-3 border border-[#ff3434] bg-black px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434]"
+                        className="mx-auto mb-3 border border-[#ff3434] bg-black px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434] animate-bounce"
                       >
                         New_Messages
                       </button>
                     )}
 
-                    {roomState === "disconnected" && (
-                      <div className="border-t border-[#3b1111] bg-[#2a0909] px-4 py-2 font-mono text-xs uppercase tracking-[0.12em] text-[#ff3434]">
+                    {connectionState === "DISCONNECTED" && (
+                      <div className="border-t border-[#3b1111] bg-[#2a0909] px-4 py-2 font-mono text-xs uppercase tracking-[0.12em] text-[#ff3434] animate-pulse">
                         Connection lost. Messages are paused until the room reconnects.
                       </div>
                     )}
@@ -337,7 +366,7 @@ export default function RoomPage() {
                         <button
                           type="submit"
                           disabled={inputDisabled || draft.trim().length === 0}
-                          className="h-16 bg-[#e92727] px-6 font-mono text-xs font-bold uppercase tracking-[0.22em] text-black shadow-[0_0_22px_rgba(233,39,39,0.28)] disabled:cursor-not-allowed disabled:opacity-40"
+                          className="h-16 bg-[#e92727] px-6 font-mono text-xs font-bold uppercase tracking-[0.22em] text-black shadow-[0_0_22px_rgba(233,39,39,0.28)] disabled:cursor-not-allowed disabled:opacity-40 hover:bg-[#ff3434] transition-colors"
                         >
                           Execute
                         </button>
@@ -374,7 +403,7 @@ export default function RoomPage() {
                     <button
                       onClick={copyRoomCode}
                       disabled={!roomCode && !roomId}
-                      className="mt-3 inline-flex h-10 items-center justify-center border border-[#3b1111] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#ff3434] transition-colors hover:border-[#ff3434] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="mt-3 inline-flex h-10 items-center justify-center border border-[#3b1111] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#ff3434] transition-colors hover:border-[#ff3434] hover:bg-[#ff3434]/10 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {didCopyCode ? "Copied" : "Copy Code"}
                     </button>
@@ -384,8 +413,7 @@ export default function RoomPage() {
                       Session_Time_Remaining
                     </p>
                     <p
-                      className={`mt-1 text-5xl ${dangerLevel === "normal" ? "text-[#ff3434]" : "text-[#ff3434]"
-                        }`}
+                      className={`mt-1 text-5xl ${dangerLevel === "normal" ? "text-[#ff3434]" : "text-[#ff3434]"} ${dangerLevel === "critical" ? "animate-pulse font-bold" : ""}`}
                       style={{ fontFamily: "var(--font-space-grotesk)" }}
                     >
                       {formatClock(remainingMs)}
@@ -414,7 +442,7 @@ export default function RoomPage() {
                   Active_Identity
                 </p>
                 <div className="mt-5 border border-[#3b1111] bg-[#170b0b] px-4 py-3 font-mono text-sm uppercase tracking-[0.12em] text-zinc-200">
-                  <span className="mr-2 inline-block h-2 w-2 bg-[#ff3434] shadow-[0_0_10px_rgba(255,52,52,0.8)]" />
+                  <span className={`mr-2 inline-block h-2 w-2 shadow-[0_0_10px_rgba(255,52,52,0.8)] ${connectionState === "CONNECTED" ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" : "bg-[#ff3434]"}`} />
                   {guestName}
                 </div>
               </section>
@@ -427,7 +455,7 @@ export default function RoomPage() {
               <button
                 onClick={() => setShowDestroyConfirm(true)}
                 disabled={roomState !== "active" || connectionState !== "CONNECTED"}
-                className="h-16 w-full border-2 border-[#ff3434] text-lg font-bold uppercase tracking-[0.2em] text-[#ff3434] shadow-[0_0_28px_rgba(255,52,52,0.18)] hover:bg-[#ff3434] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+                className="h-16 w-full border-2 border-[#ff3434] text-lg font-bold uppercase tracking-[0.2em] text-[#ff3434] shadow-[0_0_28px_rgba(255,52,52,0.18)] hover:bg-[#ff3434] hover:text-black disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
                 style={{ fontFamily: "var(--font-space-grotesk)" }}
               >
                 Destroy_Session
@@ -437,9 +465,20 @@ export default function RoomPage() {
         </div>
       </div>
 
+      {showWarningPopup && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md border border-[#ff3434] bg-[#090909] p-4 shadow-[0_0_20px_rgba(255,52,52,0.4)] animate-slide-up">
+          <div className="flex items-center gap-3">
+            <span className="flex h-2 w-2 shrink-0 animate-pulse bg-[#ff3434]"></span>
+            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#ff3434]">
+              {showWarningPopup}
+            </p>
+          </div>
+        </div>
+      )}
+
       {showDestroyConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-          <div className="w-full max-w-md border border-[#ff3434] bg-[#090909] p-6 shadow-[0_0_50px_rgba(255,52,52,0.2)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 animate-fade-in">
+          <div className="w-full max-w-md border border-[#ff3434] bg-[#090909] p-6 shadow-[0_0_50px_rgba(255,52,52,0.2)] animate-in">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff3434]">
               Destructive_Command
             </p>
@@ -452,13 +491,13 @@ export default function RoomPage() {
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setShowDestroyConfirm(false)}
-                className="h-11 border border-[#3b1111] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300 hover:border-zinc-200"
+                className="h-11 border border-[#3b1111] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300 hover:border-zinc-200 transition-colors"
               >
                 Keep Chat
               </button>
               <button
                 onClick={handleDestroyRoom}
-                className="h-11 bg-[#ff3434] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-black"
+                className="h-11 bg-[#ff3434] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-black hover:bg-red-500 transition-colors"
               >
                 Destroy Room
               </button>
@@ -504,7 +543,7 @@ function FinalState({
   }[state as "expired" | "destroyed" | "invalid"];
 
   return (
-    <div className="flex flex-1 items-center justify-center p-6 text-center">
+    <div className="flex flex-1 items-center justify-center p-6 text-center animate-in">
       <div className="max-w-md">
         <p className="text-[10px] uppercase tracking-[0.2em] text-[#ff5248]">{copy.eyebrow}</p>
         <h2 className="mt-3 text-4xl uppercase" style={{ fontFamily: "var(--font-space-grotesk)" }}>
@@ -513,7 +552,7 @@ function FinalState({
         <p className="mt-4 text-sm leading-6 text-zinc-400">{copy.body}</p>
         <button
           onClick={copy.onAction}
-          className="mt-7 h-12 bg-[#ff5248] px-7 text-[11px] font-semibold uppercase tracking-[0.14em] text-black"
+          className="mt-7 h-12 bg-[#ff5248] px-7 text-[11px] font-semibold uppercase tracking-[0.14em] text-black hover:bg-red-500 transition-colors"
         >
           {copy.action}
         </button>
