@@ -330,7 +330,7 @@ export default function RoomPage() {
                     {hasUnread && (
                       <button
                         onClick={scrollToBottom}
-                        className="mx-auto mb-3 border border-[#ff3434] bg-black px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#ff3434] animate-bounce"
+                        className="mx-auto mb-3 border border-[#ff3434] bg-[#ff3434] px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-black animate-bounce shadow-[0_0_15px_rgba(255,52,52,0.4)]"
                       >
                         New_Messages
                       </button>
