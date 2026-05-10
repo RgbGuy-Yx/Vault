@@ -1,4 +1,7 @@
+import { NextRequest, NextResponse } from "next/server";
 import { getRedis } from "@/lib/redis";
+
+type JoinBody = {
   roomId?: unknown;
 };
 
