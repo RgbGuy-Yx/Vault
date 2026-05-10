@@ -224,6 +224,8 @@ class RoomWebSocketHub {
     if (!entry) return;
 
     const { clientId } = entry;
+    console.log(`[BACKEND RECEIVE] Room: ${roomId}, Client: ${clientId}, Raw: ${raw}`);
+    
     const redis = getRedis();
 
     // 1. Rate Limiting (max 5 msgs per 2 seconds)
@@ -302,8 +304,14 @@ class RoomWebSocketHub {
       return;
     }
 
+    console.log(`[BACKEND BROADCAST] Room: ${roomId}, Message ID: ${payload.id}, To ${clients.size} clients`);
+
     for (const client of clients.values()) {
-      this.safeSend(client, payload);
+      if (client.readyState === WebSocket.OPEN) {
+        this.safeSend(client, payload);
+      } else {
+        this.removeClient(client);
+      }
     }
   }
 

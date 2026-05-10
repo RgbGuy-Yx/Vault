@@ -98,6 +98,7 @@ export function useChat(roomId: string) {
   const joinedSystemMessageRef = useRef(false);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const activeRef = useRef(false);
+  const connectIdRef = useRef(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [roomState, setRoomState] = useState<RoomState>(isInvalidRoom ? "invalid" : "checking");
@@ -137,12 +138,12 @@ export function useChat(roomId: string) {
   }, [roomId]);
 
   const closeSocket = useCallback((reason?: string) => {
+    closingRef.current = true;
     const socket = socketRef.current;
     if (!socket) {
       return;
     }
 
-    closingRef.current = true;
     socketRef.current = null;
     socket.close(1000, reason);
   }, []);
@@ -182,12 +183,19 @@ export function useChat(roomId: string) {
       return;
     }
 
+    const currentConnectId = ++connectIdRef.current;
+    closingRef.current = false;
+
     const nextConnectionState = mode === "initial" ? "CONNECTING" : "RECONNECTING";
     setConnectionState(nextConnectionState);
     setStatusText(formatStatus(roomState, nextConnectionState, reconnectAttemptsRef.current));
 
     try {
       const status = await fetchRoomStatus();
+
+      if (currentConnectId !== connectIdRef.current || closingRef.current || terminalRef.current) {
+        return;
+      }
 
       if (!status || status.exists !== true) {
         setTerminalState("invalid");
@@ -222,10 +230,14 @@ export function useChat(roomId: string) {
 
       const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 
         (`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`);
+        
+      if (socketRef.current) {
+        socketRef.current.close(1000, "Replaced");
+      }
+      
       const socket = new WebSocket(
         `${baseUrl}/api/ws?roomId=${roomId}&clientId=${clientIdRef.current}`,
       );
-      closingRef.current = false;
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
@@ -276,24 +288,30 @@ export function useChat(roomId: string) {
           return;
         }
 
-        if (messageIdsRef.current.has(payload.id)) {
-          return;
-        }
-        messageIdsRef.current.add(payload.id);
+        if (payload.type === "MESSAGE") {
+          console.log(`[FRONTEND RECEIVE] Message ID: ${payload.id}, Sender: ${payload.name}, Text: ${payload.text}`);
+          
+          if (messageIdsRef.current.has(payload.id)) {
+            return;
+          }
+          messageIdsRef.current.add(payload.id);
 
-        const mine = payload.name === guestNameRef.current;
-        setMessages((prev) =>
-          [
-            ...prev,
-            {
-              id: payload.id,
-              sender: mine ? "You" : payload.name,
-              body: payload.text,
-              at: payload.timestamp,
-              mine,
-            },
-          ].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
-        );
+          const mine = payload.name === guestNameRef.current;
+          
+          console.log(`[FRONTEND STATE UPDATE] Appending message ID: ${payload.id}`);
+          setMessages((prev) =>
+            [
+              ...prev,
+              {
+                id: payload.id,
+                sender: mine ? "You" : payload.name,
+                body: payload.text,
+                at: payload.timestamp,
+                mine,
+              },
+            ].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
+          );
+        }
       });
 
       socket.addEventListener("close", (event) => {
@@ -394,6 +412,7 @@ export function useChat(roomId: string) {
         return false;
       }
 
+      console.log(`[FRONTEND SEND] Text: ${trimmed}`);
       socket.send(JSON.stringify({ type: "MESSAGE", text: trimmed, name: guestNameRef.current }));
       return true;
     },
