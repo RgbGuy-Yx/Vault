@@ -8,7 +8,8 @@ interface GifPickerProps {
   onClose: () => void;
 }
 
-const GIPHY_API_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY || "GlVGYHqc3SyCEGnmO0locp30Xpba4tJi";
+// Fallback to Tenor API which has a reliable public test key
+const TENOR_API_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY || "LIVDSRZULELA";
 
 export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const [gifs, setGifs] = useState<any[]>([]);
@@ -19,12 +20,12 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     setLoading(true);
     try {
       const endpoint = searchQuery
-        ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(searchQuery)}&limit=20`
-        : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=20`;
+        ? `https://g.tenor.com/v1/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(searchQuery)}&limit=20`
+        : `https://g.tenor.com/v1/trending?key=${TENOR_API_KEY}&limit=20`;
       
       const res = await fetch(endpoint);
       const data = await res.json();
-      setGifs(data.data || []);
+      setGifs(data.results || []);
     } catch (err) {
       console.error("Failed to fetch GIFs:", err);
     } finally {
@@ -45,7 +46,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   }, [query, fetchGifs]);
 
   return (
-    <div className="absolute bottom-full mb-2 right-0 w-80 max-w-[calc(100vw-2rem)] border border-[#ff3434] bg-[#090909] shadow-[0_0_30px_rgba(255,52,52,0.15)] z-50 animate-slide-up">
+    <div className="absolute bottom-full mb-3 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 border border-[#ff3434] bg-[#090909] shadow-[0_0_30px_rgba(255,52,52,0.15)] z-50 animate-slide-up">
       <div className="flex items-center justify-between border-b border-[#3b1111] p-3">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#ff3434]">
           GIF_Selection
@@ -63,7 +64,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search GIPHY..."
+          placeholder="Search GIFs..."
           className="w-full border border-[#3b1111] bg-black px-3 py-2 font-mono text-xs text-white placeholder-zinc-600 focus:border-[#ff3434] focus:outline-none"
         />
       </div>
@@ -82,12 +83,12 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
             {gifs.map((gif) => (
               <button
                 key={gif.id}
-                onClick={() => onSelect(gif.images.fixed_height.url)}
+                onClick={() => onSelect(gif.media[0].gif.url)}
                 className="group relative aspect-video overflow-hidden border border-[#3b1111] bg-black hover:border-[#ff3434] transition-colors"
               >
                 <Image
-                  src={gif.images.fixed_height_small.url}
-                  alt={gif.title}
+                  src={gif.media[0].tinygif.url}
+                  alt={gif.title || "GIF"}
                   fill
                   sizes="(max-width: 768px) 50vw, 33vw"
                   className="object-cover group-hover:scale-105 transition-transform duration-300"
@@ -99,15 +100,8 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         )}
       </div>
       
-      <div className="border-t border-[#3b1111] p-2 text-center">
-        <Image
-          src="/Poweredby_100px-Black_VertLogo.png"
-          alt="Powered by Giphy"
-          width={100}
-          height={35}
-          className="mx-auto opacity-50"
-          unoptimized
-        />
+      <div className="border-t border-[#3b1111] p-2 text-center font-mono text-[10px] text-zinc-600 uppercase">
+        Powered by Tenor
       </div>
     </div>
   );

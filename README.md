@@ -78,6 +78,11 @@ Vault is a minimalist, ephemeral chat platform designed for **privacy-first real
 * Unique room link
 * Anyone with link can join
 
+### 🎞️ Lightweight GIF Support
+
+* Built-in GIPHY API search and trending.
+* Zero server storage: sends lightweight GIF URLs via WebSockets instead of uploading files.
+
 ---
 
 ## 🏗️ Architecture Overview
@@ -400,6 +405,25 @@ http://localhost:3000
 ```
 
 
+
+## 🎯 Interview Questions & Answers
+
+**1. Why did you use WebSockets instead of Server-Sent Events (SSE) or Long-Polling?**
+**Answer:** A chat application requires real-time, low-latency, *bi-directional* communication. WebSockets keep a persistent connection open, allowing both the client and server to push messages instantly without the heavy overhead of HTTP headers on every request. SSE is strictly one-way (server-to-client), and long-polling wastes server resources and introduces latency.
+
+**2. How do you ensure rooms delete themselves automatically without running complex server cron jobs?**
+**Answer:** I utilized **Redis TTL (Time-To-Live)**. When a room is created, its state is stored in Redis with an expiry time of exactly 10 minutes (600 seconds). Redis natively evicts the key from memory once the timer hits zero. The frontend gracefully detects this (either via a lightweight polling fallback or WebSocket disconnection) and shows the "Room Expired" UI.
+
+**3. How did you implement GIF support without slowing down the app or filling up server storage?**
+**Answer:** Instead of allowing users to upload heavy `.gif` files to our server, the frontend queries the **GIPHY API** directly. When a user selects a GIF, the app only sends the **image URL string** through the WebSocket. The receiving clients then render an `<Image>` tag pointing to that URL. This keeps payloads tiny (a few bytes), requires zero database storage, and offloads image hosting entirely to Giphy.
+
+**4. How do you handle users temporarily dropping connection (e.g., switching networks on mobile)?**
+**Answer:** The frontend generates a unique `clientId` and stores it in `sessionStorage` (which persists across reloads but isolates multiple tabs). If the WebSocket connection drops, the `useChat` hook initiates an automatic reconnection with exponential backoff. When the client reconnects passing its existing `clientId`, the server smartly drops the "stale" socket and replaces it with the new one without treating the user as a brand new participant.
+
+**5. Why are you running a custom Node.js server instead of just relying entirely on Next.js Serverless API routes?**
+**Answer:** Standard Next.js serverless functions (like those deployed on Vercel) are stateless and spin down quickly, meaning they cannot host long-lived WebSocket connections. To solve this, I built a custom Node.js server wrapper (`server.ts`). It passes all standard HTTP requests to the Next.js handler, but intercepts any request going to `/api/ws`, explicitly "upgrading" it into a persistent WebSocket connection attached to the Node server.
+
+---
 
 ## 📌 Future Improvements
 
