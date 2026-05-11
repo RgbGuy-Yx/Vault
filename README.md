@@ -414,6 +414,12 @@ http://localhost:3000
 
 ---
 
+## 🎤 Interview Preparation
+
+Are you using this project as a portfolio piece for job interviews? Check out the [Interview Questions](interview.md) document to prepare for technical discussions regarding architecture, WebSockets, React, Next.js, and Redis.
+
+---
+
 ## 🤝 Contribution
 
 Feel free to:
