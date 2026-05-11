@@ -461,7 +461,7 @@ class RoomWebSocketHub {
         const gifUrl = parsed.gifUrl.trim();
         const name = parsed.name.trim();
         
-        if (!gifUrl.startsWith("http") || gifUrl.length > 500 || name.length === 0 || name.length > 64) {
+        if (!gifUrl.startsWith("http") || gifUrl.length > 2000 || name.length === 0 || name.length > 64) {
           return null;
         }
 

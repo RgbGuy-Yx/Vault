@@ -46,7 +46,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   }, [query, fetchGifs]);
 
   return (
-    <div className="absolute bottom-full mb-3 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 border border-[#ff3434] bg-[#090909] shadow-[0_0_30px_rgba(255,52,52,0.15)] z-50 animate-slide-up">
+    <div className="absolute bottom-full mb-3 left-0 right-0 w-full sm:left-auto sm:right-0 sm:w-[380px] border border-[#ff3434] bg-[#090909] shadow-[0_0_30px_rgba(255,52,52,0.15)] z-50 animate-slide-up">
       <div className="flex items-center justify-between border-b border-[#3b1111] p-3">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#ff3434]">
           GIF_Selection
