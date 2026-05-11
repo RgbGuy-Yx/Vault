@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useChat, type RoomState } from "@/hooks/useChat";
+import { GifPicker } from "@/components/GifPicker";
+import Image from "next/image";
 
 function formatClock(ms: number) {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -31,10 +33,12 @@ export default function RoomPage() {
     guestName,
     remainingMs,
     sendMessage: sendChatMessage,
+    sendGif: sendChatGif,
     destroyRoom: destroyChatRoom,
   } = useChat(roomId);
 
   const [draft, setDraft] = useState("");
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
   const [stickToBottom, setStickToBottom] = useState(true);
   const [hasUnread, setHasUnread] = useState(false);
@@ -140,6 +144,15 @@ export default function RoomPage() {
   const handleDestroyRoom = async () => {
     setShowDestroyConfirm(false);
     await destroyChatRoom();
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    if (inputDisabled) return;
+    
+    if (sendChatGif(gifUrl)) {
+      setShowGifPicker(false);
+      setStickToBottom(true);
+    }
   };
 
   const createNewRoom = async () => {
@@ -309,7 +322,20 @@ export default function RoomPage() {
                                       : "border-[#ff3434] text-zinc-100"
                                       }`}
                                   >
-                                    <p className="whitespace-pre-wrap wrap-break-word">{message.body}</p>
+                                    {message.type === "GIF" ? (
+                                      <div className="relative aspect-video w-full max-w-[300px] overflow-hidden">
+                                        <Image
+                                          src={message.body}
+                                          alt="GIF Message"
+                                          fill
+                                          sizes="(max-width: 768px) 100vw, 300px"
+                                          className="object-cover"
+                                          unoptimized
+                                        />
+                                      </div>
+                                    ) : (
+                                      <p className="whitespace-pre-wrap wrap-break-word">{message.body}</p>
+                                    )}
                                   </div>
                                   <div
                                     className={`mt-2 flex gap-2 font-mono text-[9px] uppercase tracking-[0.12em] text-[#ff3434] ${message.mine ? "justify-end" : "justify-start"
@@ -341,8 +367,22 @@ export default function RoomPage() {
                       </div>
                     )}
 
-                    <form onSubmit={handleSendMessage} className="shrink-0 border-t border-[#3b1111] bg-black p-4">
+                    <form onSubmit={handleSendMessage} className="shrink-0 border-t border-[#3b1111] bg-black p-4 relative">
+                      {showGifPicker && (
+                        <GifPicker 
+                          onSelect={handleGifSelect}
+                          onClose={() => setShowGifPicker(false)}
+                        />
+                      )}
                       <div className="flex items-end gap-2">
+                        <button
+                          type="button"
+                          disabled={inputDisabled}
+                          onClick={() => setShowGifPicker((prev) => !prev)}
+                          className="h-16 w-16 shrink-0 border border-[#3b1111] bg-[#0d0d0d] flex items-center justify-center font-mono text-xs font-bold text-[#ff3434] hover:bg-[#1a0a0a] disabled:opacity-40 transition-colors"
+                        >
+                          GIF
+                        </button>
                         <textarea
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}

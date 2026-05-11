@@ -3,19 +3,33 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, WebSocket } from "ws";
 import { getRedis } from "./redis";
 
-type BroadcastMessage = {
-  type: "MESSAGE";
-  id: string;
-  text: string;
-  name: string;
-  timestamp: number;
-};
+type BroadcastMessage =
+  | {
+      type: "MESSAGE";
+      id: string;
+      text: string;
+      name: string;
+      timestamp: number;
+    }
+  | {
+      type: "GIF";
+      id: string;
+      gifUrl: string;
+      name: string;
+      timestamp: number;
+    };
 
-type ClientMessage = {
-  type: "MESSAGE";
-  text: unknown;
-  name: unknown;
-};
+type ClientMessage =
+  | {
+      type: "MESSAGE";
+      text: unknown;
+      name: unknown;
+    }
+  | {
+      type: "GIF";
+      gifUrl: unknown;
+      name: unknown;
+    };
 
 type DestroyedMessage = {
   type: "DESTROYED";
@@ -286,13 +300,25 @@ class RoomWebSocketHub {
       return;
     }
 
-    const outgoing: BroadcastMessage = {
-      type: "MESSAGE",
-      id: this.nextMessageId(roomId),
-      text: payload.text,
-      name: payload.name,
-      timestamp: Date.now(),
-    };
+    let outgoing: BroadcastMessage;
+    
+    if (payload.type === "MESSAGE") {
+      outgoing = {
+        type: "MESSAGE",
+        id: this.nextMessageId(roomId),
+        text: payload.text,
+        name: payload.name,
+        timestamp: Date.now(),
+      };
+    } else {
+      outgoing = {
+        type: "GIF",
+        id: this.nextMessageId(roomId),
+        gifUrl: payload.gifUrl,
+        name: payload.name,
+        timestamp: Date.now(),
+      };
+    }
 
     this.broadcast(roomId, outgoing);
   }
@@ -412,26 +438,37 @@ class RoomWebSocketHub {
     return { roomId, clientId };
   }
 
-  private parseClientMessage(raw: string): { text: string; name: string } | null {
+  private parseClientMessage(raw: string): { type: "MESSAGE"; text: string; name: string } | { type: "GIF"; gifUrl: string; name: string } | null {
     try {
       const parsed = JSON.parse(raw) as ClientMessage;
 
-      if (parsed.type !== "MESSAGE") {
-        return null;
+      if (parsed.type === "MESSAGE") {
+        if (typeof parsed.text !== "string" || typeof parsed.name !== "string") {
+          return null;
+        }
+        const text = parsed.text.trim();
+        const name = parsed.name.trim();
+
+        if (text.length === 0 || text.length > 1000 || name.length === 0 || name.length > 64) {
+          return null;
+        }
+
+        return { type: "MESSAGE", text, name };
+      } else if (parsed.type === "GIF") {
+        if (typeof parsed.gifUrl !== "string" || typeof parsed.name !== "string") {
+          return null;
+        }
+        const gifUrl = parsed.gifUrl.trim();
+        const name = parsed.name.trim();
+        
+        if (!gifUrl.startsWith("http") || gifUrl.length > 500 || name.length === 0 || name.length > 64) {
+          return null;
+        }
+
+        return { type: "GIF", gifUrl, name };
       }
 
-      if (typeof parsed.text !== "string" || typeof parsed.name !== "string") {
-        return null;
-      }
-
-      const text = parsed.text.trim();
-      const name = parsed.name.trim();
-
-      if (text.length === 0 || text.length > 1000 || name.length === 0 || name.length > 64) {
-        return null;
-      }
-
-      return { text, name };
+      return null;
     } catch {
       return null;
     }

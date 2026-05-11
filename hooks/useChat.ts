@@ -12,6 +12,7 @@ export type ChatMessage = {
   sender: string;
   body: string;
   at: number;
+  type: "TEXT" | "GIF";
   mine?: boolean;
   system?: boolean;
 };
@@ -24,6 +25,13 @@ type ServerMessage =
       type: "MESSAGE";
       id: string;
       text: string;
+      name: string;
+      timestamp: number;
+    }
+  | {
+      type: "GIF";
+      id: string;
+      gifUrl: string;
       name: string;
       timestamp: number;
     }
@@ -251,6 +259,7 @@ export function useChat(roomId: string) {
               sender: "System",
               body: `You joined as ${guestNameRef.current}.`,
               at: Date.now(),
+              type: "TEXT",
               system: true,
             },
           ]);
@@ -286,8 +295,8 @@ export function useChat(roomId: string) {
           return;
         }
 
-        if (payload.type === "MESSAGE") {
-          console.log(`[FRONTEND RECEIVE] Message ID: ${payload.id}, Sender: ${payload.name}, Text: ${payload.text}`);
+        if (payload.type === "MESSAGE" || payload.type === "GIF") {
+          console.log(`[FRONTEND RECEIVE] Message ID: ${payload.id}, Sender: ${payload.name}`);
           
           if (messageIdsRef.current.has(payload.id)) {
             return;
@@ -303,8 +312,9 @@ export function useChat(roomId: string) {
               {
                 id: payload.id,
                 sender: mine ? "You" : payload.name,
-                body: payload.text,
+                body: payload.type === "MESSAGE" ? payload.text : payload.gifUrl,
                 at: payload.timestamp,
+                type: (payload.type === "MESSAGE" ? "TEXT" : "GIF") as "TEXT" | "GIF",
                 mine,
               },
             ].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
@@ -425,6 +435,20 @@ export function useChat(roomId: string) {
     [connectionState, roomState],
   );
 
+  const sendGif = useCallback(
+    (gifUrl: string) => {
+      const socket = socketRef.current;
+      if (!gifUrl || roomState !== "active" || connectionState !== "CONNECTED" || socket?.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+
+      console.log(`[FRONTEND SEND] GIF: ${gifUrl}`);
+      socket.send(JSON.stringify({ type: "GIF", gifUrl, name: guestNameRef.current }));
+      return true;
+    },
+    [connectionState, roomState],
+  );
+
   const destroyRoom = useCallback(async () => {
     clearReconnectTimer();
     closeSocket("Room destroyed");
@@ -467,6 +491,7 @@ export function useChat(roomId: string) {
     expiresAt,
     remainingMs,
     sendMessage,
+    sendGif,
     destroyRoom,
     disconnect,
     setTerminalState,
