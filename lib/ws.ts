@@ -277,8 +277,8 @@ class RoomWebSocketHub {
 
     // 3. Message Validation
     const payload = this.parseClientMessage(raw);
-    if (!payload) {
-      this.safeSend(socket, { type: "ERROR", message: "Invalid payload or message too long" });
+    if (typeof payload === "string") {
+      this.safeSend(socket, { type: "ERROR", message: `Parse Error: ${payload}` });
       return;
     }
 
@@ -438,39 +438,48 @@ class RoomWebSocketHub {
     return { roomId, clientId };
   }
 
-  private parseClientMessage(raw: string): { type: "MESSAGE"; text: string; name: string } | { type: "GIF"; gifUrl: string; name: string } | null {
+  private parseClientMessage(raw: string): { type: "MESSAGE"; text: string; name: string } | { type: "GIF"; gifUrl: string; name: string } | string {
     try {
       const parsed = JSON.parse(raw) as ClientMessage;
 
       if (parsed.type === "MESSAGE") {
         if (typeof parsed.text !== "string" || typeof parsed.name !== "string") {
-          return null;
+          return "Invalid MESSAGE fields";
         }
         const text = parsed.text.trim();
         const name = parsed.name.trim();
 
         if (text.length === 0 || text.length > 1000 || name.length === 0 || name.length > 64) {
-          return null;
+          return "MESSAGE length limits exceeded";
         }
 
         return { type: "MESSAGE", text, name };
       } else if (parsed.type === "GIF") {
-        if (typeof parsed.gifUrl !== "string" || typeof parsed.name !== "string") {
-          return null;
+        if (typeof parsed.gifUrl !== "string") {
+          return "GIF URL must be a string";
+        }
+        if (typeof parsed.name !== "string") {
+          return "Name must be a string";
         }
         const gifUrl = parsed.gifUrl.trim();
         const name = parsed.name.trim();
         
-        if (!gifUrl.startsWith("http") || gifUrl.length > 2000 || name.length === 0 || name.length > 64) {
-          return null;
+        if (!gifUrl.startsWith("http")) {
+            return "GIF URL must start with http";
+        }
+        if (gifUrl.length > 2000) {
+            return "GIF URL exceeds 2000 chars";
+        }
+        if (name.length === 0 || name.length > 64) {
+            return "Invalid name length";
         }
 
         return { type: "GIF", gifUrl, name };
       }
 
-      return null;
+      return "Unknown payload type";
     } catch {
-      return null;
+      return "JSON Parse error";
     }
   }
 
