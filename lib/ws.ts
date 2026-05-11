@@ -225,7 +225,7 @@ class RoomWebSocketHub {
 
     const { clientId } = entry;
     console.log(`[BACKEND RECEIVE] Room: ${roomId}, Client: ${clientId}, Raw: ${raw}`);
-    
+
     const redis = getRedis();
 
     // 1. Rate Limiting (max 5 msgs per 2 seconds)
@@ -236,9 +236,9 @@ class RoomWebSocketHub {
     }
 
     if (count > 5) {
-      this.safeSend(socket, { 
-        type: "ERROR", 
-        message: "You are sending messages too fast. Slow down!" 
+      this.safeSend(socket, {
+        type: "ERROR",
+        message: "You are sending messages too fast. Slow down!"
       });
       return;
     }

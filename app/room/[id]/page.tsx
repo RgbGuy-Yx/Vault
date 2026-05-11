@@ -305,8 +305,8 @@ export default function RoomPage() {
                                   </div>
                                   <div
                                     className={`border bg-[#121212]/95 px-5 py-4 text-base leading-7 shadow-[0_0_28px_rgba(0,0,0,0.45)] md:text-lg ${message.mine
-                                        ? "border-[#ff3434] text-zinc-100"
-                                        : "border-[#ff3434] text-zinc-100"
+                                      ? "border-[#ff3434] text-zinc-100"
+                                      : "border-[#ff3434] text-zinc-100"
                                       }`}
                                   >
                                     <p className="whitespace-pre-wrap wrap-break-word">{message.body}</p>

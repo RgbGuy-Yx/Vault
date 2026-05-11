@@ -373,62 +373,7 @@ Detailed workflows above. Quick steps:
 * Frontend polls `/api/room/status` periodically
 * If room not found → triggers cleanup UI
 
----
-
-## 🔄 Phases Implemented
-
-### ✅ Phase 1 — Room Lifecycle
-
-* Create / Join / Destroy APIs
-* Redis TTL-based rooms
-
-### ✅ Phase 2 — Real-Time Messaging
-
-* WebSocket server
-* Message broadcasting
-
-### ✅ Phase 3 — Frontend Integration
-
-* Chat UI
-* WebSocket connection
-* Destroy handling
-
----
-
-## 🚧 Remaining Phases
-
-### ⚡ Phase A — Correctness & Consistency
-
-* Handle destroy/message race
-* Handle expiry properly
-* Prevent duplicate messages
-* Clean reconnect logic
-
----
-
-### ⚡ Phase B — Reliability & Security
-
-* Rate limiting (Redis INCR)
-* Input validation
-* Spam prevention
-* Error handling
-
----
-
-### ⚡ Phase C — UX & Performance
-
-* Smooth scrolling
-* Connection indicators
-* Render optimization
-* UI polish
-
----
-
-## ⚠️ Known Challenges
-
-* Redis TTL does not notify clients → must handle manually
-* WebSocket lifecycle management is critical
-* Race conditions during destroy events
+--
 
 ---
 
@@ -454,21 +399,7 @@ Then open:
 http://localhost:3000
 ```
 
----
 
-## 💣 Reality Check
-
-This is not just a “chat app”.
-
-It is:
-
-* a real-time system
-* with distributed state
-* and ephemeral guarantees
-
-If you ignore edge cases → it will break.
-
----
 
 ## 📌 Future Improvements
 
