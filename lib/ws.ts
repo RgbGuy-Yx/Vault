@@ -238,7 +238,7 @@ class RoomWebSocketHub {
     if (!entry) return;
 
     const { clientId } = entry;
-    console.log(`[BACKEND RECEIVE] Room: ${roomId}, Client: ${clientId}, Raw: ${raw}`);
+    console.log(`[BACKEND RECEIVE] Room: ${roomId}, Client: ${clientId}, Payload Length: ${raw.length}`);
 
     const redis = getRedis();
 
@@ -449,8 +449,16 @@ class RoomWebSocketHub {
         const text = parsed.text.trim();
         const name = parsed.name.trim();
 
-        if (text.length === 0 || text.length > 1000 || name.length === 0 || name.length > 64) {
-          return "MESSAGE length limits exceeded";
+        if (text.length === 0) {
+          return "Message cannot be empty";
+        }
+        
+        if (text.length > 5000) {
+          return "Message exceeds 5,000 characters";
+        }
+        
+        if (name.length === 0 || name.length > 64) {
+          return "Invalid alias length";
         }
 
         return { type: "MESSAGE", text, name };
@@ -464,22 +472,27 @@ class RoomWebSocketHub {
         const gifUrl = parsed.gifUrl.trim();
         const name = parsed.name.trim();
         
-        if (!gifUrl.startsWith("http")) {
-            return "GIF URL must start with http";
+        const isDataUrl = gifUrl.startsWith("data:");
+        const isHttpUrl = gifUrl.startsWith("http://") || gifUrl.startsWith("https://") || gifUrl.startsWith("//");
+        
+        if (!isDataUrl && !isHttpUrl) {
+            return "GIF source must be a valid URL or data URI";
         }
-        if (gifUrl.length > 2000) {
-            return "GIF URL exceeds 2000 chars";
+        
+        if (gifUrl.length > 2000000) { // 2MB limit for GIFs
+            return "GIF data is too large (max 2MB)";
         }
+        
         if (name.length === 0 || name.length > 64) {
-            return "Invalid name length";
+            return "Invalid alias length";
         }
 
         return { type: "GIF", gifUrl, name };
       }
 
-      return "Unknown payload type";
+      return "Unknown message type";
     } catch {
-      return "JSON Parse error";
+      return "JSON parse failed";
     }
   }
 
@@ -520,7 +533,10 @@ function getHubInstance(): RoomWebSocketHub {
     return globalThis.__roomWsHub__;
   }
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ 
+    noServer: true,
+    maxPayload: 10 * 1024 * 1024
+  });
   const hub = new RoomWebSocketHub(wss);
 
   globalThis.__roomWsHub__ = hub;

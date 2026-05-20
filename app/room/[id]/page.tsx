@@ -394,7 +394,7 @@ export default function RoomPage() {
                           }}
                           disabled={inputDisabled}
                           rows={1}
-                          maxLength={800}
+                          maxLength={4000}
                           placeholder={
                             inputDisabled
                               ? "SESSION_NOT_ACCEPTING_MESSAGES..."
@@ -412,7 +412,7 @@ export default function RoomPage() {
                       </div>
                       <div className="mt-3 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-700">
                         <span>No_Login // No_Permanent_History</span>
-                        <span>{draft.length}/800</span>
+                        <span>{draft.length}/4000</span>
                       </div>
                     </form>
                   </>
