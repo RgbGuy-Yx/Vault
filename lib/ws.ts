@@ -441,6 +441,7 @@ class RoomWebSocketHub {
   private parseClientMessage(raw: string): { type: "MESSAGE"; text: string; name: string } | { type: "GIF"; gifUrl: string; name: string } | string {
     try {
       const parsed = JSON.parse(raw) as ClientMessage;
+      console.log(`[DEBUG] Parsed message type: ${parsed.type}`);
 
       if (parsed.type === "MESSAGE") {
         if (typeof parsed.text !== "string" || typeof parsed.name !== "string") {
@@ -491,7 +492,8 @@ class RoomWebSocketHub {
       }
 
       return "Unknown message type";
-    } catch {
+    } catch (e) {
+      console.error("[DEBUG] JSON parse failed for raw message:", raw.slice(0, 100));
       return "JSON parse failed";
     }
   }
