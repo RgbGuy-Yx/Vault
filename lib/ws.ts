@@ -469,12 +469,12 @@ class RoomWebSocketHub {
           return "GIF data cannot be empty";
         }
 
-        if (gifUrl.length > 3000000) {
-            return "GIF data is too large";
+        if (gifUrl.length > 2048) {
+            return "GIF URL is too long";
         }
 
-        if (!/^(https?:\/\/|data:image\/gif;)/.test(gifUrl)) {
-          return "GIF source must be a valid URL or data URI";
+        if (!/^https?:\/\/[^\s]+$/i.test(gifUrl)) {
+          return "GIF source must be a valid HTTP(S) URL";
         }
         
         if (name.length === 0 || name.length > 64) {

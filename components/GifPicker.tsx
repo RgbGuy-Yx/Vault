@@ -83,7 +83,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
             {gifs.map((gif) => (
               <button
                 key={gif.id}
-                onClick={() => onSelect(gif.media[0].gif.url)}
+                onClick={() => onSelect(gif.media[0].tinygif.url)}
                 className="group relative aspect-video overflow-hidden border border-[#3b1111] bg-black hover:border-[#ff3434] transition-colors"
               >
                 <Image
