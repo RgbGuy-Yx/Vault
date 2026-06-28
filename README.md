@@ -1,6 +1,6 @@
 # 🚀 Vault Anonymous Chat
 
-A real-time, private chat application where users can create a room, share a link, and communicate instantly—without accounts.
+A a real-time, private chat application where users can create a room, share a link, and communicate instantly—without accounts.
 Every room is temporary and **self-destructs after 10 minutes** or can be destroyed instantly.
 
 ---
