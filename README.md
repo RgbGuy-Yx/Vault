@@ -78,11 +78,6 @@ Vault is a minimalist, ephemeral chat platform designed for **privacy-first real
 * Unique room link
 * Anyone with link can join
 
-### 🎞️ Lightweight GIF Support
-
-* Built-in GIPHY API search and trending.
-* Zero server storage: sends lightweight GIF URLs via WebSockets instead of uploading files.
-
 ---
 
 ## 🏗️ Architecture Overview
@@ -378,18 +373,8 @@ Detailed workflows above. Quick steps:
 * Frontend polls `/api/room/status` periodically
 * If room not found → triggers cleanup UI
 
---
-
 ---
 
-## 🧠 Design Principles
-
-* **Minimalism over features**
-* **Correctness over speed**
-* **Ephemeral by default**
-* **No unnecessary persistence**
-
----
 
 ## 🚀 Running Locally
 
@@ -404,15 +389,8 @@ Then open:
 http://localhost:3000
 ```
 
-
-## 📌 Future Improvements
-
-* Better reconnect handling
-* Optional room access tokens
-* Scalable WebSocket deployment
-* Monitoring & logging
-
 ---
+
 
 
 ---
@@ -427,12 +405,3 @@ Feel free to:
 
 ---
 
-## 🧠 Final Note
-
-This project is designed to:
-
-> teach real-time system thinking, not just UI building.
-
-If it “works” but feels inconsistent → you’re not done.
-
----

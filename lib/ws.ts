@@ -139,7 +139,6 @@ class RoomWebSocketHub {
   }
 
   private async handleConnection(socket: WebSocket, req: IncomingMessage) {
-    console.log("WS CONNECTION ATTEMPT:", req.url);
     try {
       const connection = this.extractConnection(req.url ?? "");
       if (!connection) {
@@ -176,9 +175,7 @@ class RoomWebSocketHub {
         return;
       }
 
-      console.log("Fetching room state for", roomId);
       const room = await this.getRoomState(roomId);
-      console.log("Got room state:", room);
       if (!room) {
         this.notifyRoomExpired(roomId);
         this.safeSend(socket, { type: "EXPIRED" });
@@ -188,7 +185,6 @@ class RoomWebSocketHub {
 
       this.scheduleRoomExpiry(roomId, room);
       this.addClient(roomId, clientId, socket);
-      console.log("Added client", clientId, "to room", roomId);
 
       const postJoinStatus = await this.resolveRoomStatus(roomId);
       if (postJoinStatus === "destroyed") {
@@ -238,7 +234,6 @@ class RoomWebSocketHub {
     if (!entry) return;
 
     const { clientId } = entry;
-    console.log(`[BACKEND RECEIVE] Room: ${roomId}, Client: ${clientId}, Payload Length: ${raw.length}`);
 
     const redis = getRedis();
 
@@ -329,8 +324,6 @@ class RoomWebSocketHub {
       this.roomClients.delete(roomId);
       return;
     }
-
-    console.log(`[BACKEND BROADCAST] Room: ${roomId}, Message ID: ${payload.id}, To ${clients.size} clients`);
 
     for (const client of clients.values()) {
       if (client.readyState === WebSocket.OPEN) {
@@ -441,7 +434,6 @@ class RoomWebSocketHub {
   private parseClientMessage(raw: string): { type: "MESSAGE"; text: string; name: string } | { type: "GIF"; gifUrl: string; name: string } | string {
     try {
       const parsed = JSON.parse(raw) as ClientMessage;
-      console.log(`[DEBUG] Parsed message type: ${parsed.type}`);
 
       if (parsed.type === "MESSAGE") {
         if (typeof parsed.text !== "string" || typeof parsed.name !== "string") {
@@ -454,8 +446,8 @@ class RoomWebSocketHub {
           return "Message cannot be empty";
         }
         
-        if (text.length > 5000) {
-          return "Message exceeds 5,000 characters";
+        if (text.length > 10000) {
+          return "Message exceeds maximum length";
         }
         
         if (name.length === 0 || name.length > 64) {
@@ -465,7 +457,7 @@ class RoomWebSocketHub {
         return { type: "MESSAGE", text, name };
       } else if (parsed.type === "GIF") {
         if (typeof parsed.gifUrl !== "string") {
-          return "GIF URL must be a string";
+          return "GIF data must be a string";
         }
         if (typeof parsed.name !== "string") {
           return "Name must be a string";
@@ -473,15 +465,16 @@ class RoomWebSocketHub {
         const gifUrl = parsed.gifUrl.trim();
         const name = parsed.name.trim();
         
-        const isDataUrl = gifUrl.startsWith("data:");
-        const isHttpUrl = gifUrl.startsWith("http://") || gifUrl.startsWith("https://") || gifUrl.startsWith("//");
-        
-        if (!isDataUrl && !isHttpUrl) {
-            return "GIF source must be a valid URL or data URI";
+        if (gifUrl.length === 0) {
+          return "GIF data cannot be empty";
         }
-        
-        if (gifUrl.length > 2000000) { // 2MB limit for GIFs
-            return "GIF data is too large (max 2MB)";
+
+        if (gifUrl.length > 3000000) {
+            return "GIF data is too large";
+        }
+
+        if (!/^(https?:\/\/|data:image\/gif;)/.test(gifUrl)) {
+          return "GIF source must be a valid URL or data URI";
         }
         
         if (name.length === 0 || name.length > 64) {

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useChat, type RoomState } from "@/hooks/useChat";
 import { GifPicker } from "@/components/GifPicker";
 import Image from "next/image";
+import { importKey } from "@/lib/crypto";
 
 function formatClock(ms: number) {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -25,6 +26,25 @@ export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
   const roomId = String(params.id ?? "");
+  const [encryptionKey, setEncryptionKey] = useState<CryptoKey | null>(null);
+  const [keyStatus, setKeyStatus] = useState<"loading" | "ok" | "missing">("loading");
+
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) {
+      setKeyStatus("missing");
+      return;
+    }
+    importKey(hash)
+      .then((key) => {
+        setEncryptionKey(key);
+        setKeyStatus("ok");
+      })
+      .catch(() => {
+        setKeyStatus("missing");
+      });
+  }, []);
+
   const {
     messages,
     roomState,
@@ -35,7 +55,7 @@ export default function RoomPage() {
     sendMessage: sendChatMessage,
     sendGif: sendChatGif,
     destroyRoom: destroyChatRoom,
-  } = useChat(roomId);
+  } = useChat(roomId, encryptionKey);
 
   const [draft, setDraft] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
@@ -160,7 +180,10 @@ export default function RoomPage() {
       const res = await fetch("/api/room/create", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error("Failed to create room");
-      router.push(`/room/${data.roomId}`);
+      const { generateKey: genKey, exportKey: expKey } = await import("@/lib/crypto");
+      const key = await genKey();
+      const exported = await expKey(key);
+      router.push(`/room/${data.roomId}#${exported}`);
     } catch {
       router.push("/");
     }
@@ -270,7 +293,25 @@ export default function RoomPage() {
               </div>
 
               <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-                {roomState === "expired" || roomState === "destroyed" || roomState === "invalid" ? (
+                {keyStatus === "missing" ? (
+                  <div className="flex flex-1 items-center justify-center p-6 text-center animate-in">
+                    <div className="max-w-md">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-[#ff5248]">Encryption key required</p>
+                      <h2 className="mt-3 text-3xl uppercase" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                        Missing room key
+                      </h2>
+                      <p className="mt-4 text-sm leading-6 text-zinc-400">
+                        You need the full room link (with the #key fragment) to join this encrypted room. Ask the room creator for the complete link.
+                      </p>
+                      <button
+                        onClick={() => router.push("/")}
+                        className="mt-7 h-12 bg-[#ff5248] px-7 text-[11px] font-semibold uppercase tracking-[0.14em] text-black hover:bg-red-500 transition-colors"
+                      >
+                        Return Home
+                      </button>
+                    </div>
+                  </div>
+                ) : roomState === "expired" || roomState === "destroyed" || roomState === "invalid" ? (
                   <FinalState state={roomState} onCreateNewRoom={createNewRoom} onGoHome={() => router.push("/")} />
                 ) : (
                   <>

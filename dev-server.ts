@@ -26,6 +26,8 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { createProxyServer } from "http-proxy";
 
+import { roomWsHub } from "./lib/ws";
+
 const hostname = process.env.HOST ?? "0.0.0.0";
 const publicPort = Number(process.env.PORT ?? 3000);
 const upstreamPort = Number(process.env.NEXT_DEV_PORT ?? 3001);
@@ -40,16 +42,6 @@ const proxy = createProxyServer({
   ws: true,
   target: upstreamTarget,
 });
-
-let wsHubPromise: Promise<typeof import("./lib/ws")> | null = null;
-
-function getWsHub() {
-  if (!wsHubPromise) {
-    wsHubPromise = import("./lib/ws");
-  }
-
-  return wsHubPromise;
-}
 
 // 🚀 Start Next.js dev server
 const devServer = spawn(
@@ -73,24 +65,6 @@ devServer.on("exit", (code, signal) => {
 
 // 🌐 Proxy HTTP requests to Next.js
 const server = createServer((req, res) => {
-  if (req.method === "POST" && req.url?.includes("/api/ws/internal/destroy")) {
-    let body = "";
-    req.on("data", chunk => body += chunk.toString());
-    req.on("end", () => {
-      try {
-        const { roomId } = JSON.parse(body);
-        if (roomId) {
-          void getWsHub().then(({ roomWsHub }) => roomWsHub.notifyRoomDestroyed(roomId));
-        }
-      } catch (err) {
-        console.error("Internal destroy hook error", err);
-      }
-      res.statusCode = 200;
-      res.end("OK");
-    });
-    return;
-  }
-
   proxy.web(req, res, { target: upstreamTarget }, (error) => {
     console.error("Proxy request failed", error);
     if (!res.headersSent) {
@@ -104,17 +78,8 @@ const server = createServer((req, res) => {
 
 // 🔌 Handle WebSocket upgrade
 server.on("upgrade", (req, socket, head) => {
-  console.log("UPGRADE INCOMING:", req.url);
-  if (req.url?.includes("/api/ws")) {
-    console.log("ROUTING TO WS HUB");
-    void getWsHub()
-      .then(({ roomWsHub }) => {
-        roomWsHub.handleUpgrade(req, socket, head);
-      })
-      .catch((error) => {
-        console.error("Failed to initialize WebSocket hub", error);
-        socket.destroy();
-      });
+  if (req.url?.startsWith("/api/ws")) {
+    roomWsHub.handleUpgrade(req, socket, head);
     return;
   }
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateParticipantName } from "@/lib/name";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const CLIENT_ID_KEY = "chat_client_id";
@@ -93,10 +94,11 @@ function getOrCreateParticipantName(): string {
   return nextParticipantName;
 }
 
-export function useChat(roomId: string) {
+export function useChat(roomId: string, encryptionKey: CryptoKey | null = null) {
   const isInvalidRoom = roomId.length !== 8;
   const clientIdRef = useRef<string>(getOrCreateClientId());
   const guestNameRef = useRef("guest");
+  const encryptionKeyRef = useRef<CryptoKey | null>(encryptionKey);
   const socketRef = useRef<WebSocket | null>(null);
   const closingRef = useRef(false);
   const terminalRef = useRef(isInvalidRoom);
@@ -115,6 +117,10 @@ export function useChat(roomId: string) {
   const [guestName, setGuestName] = useState("guest");
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [remainingMs, setRemainingMs] = useState(0);
+
+  useEffect(() => {
+    encryptionKeyRef.current = encryptionKey;
+  }, [encryptionKey]);
 
   useEffect(() => {
     const nextGuestName = getOrCreateParticipantName();
@@ -267,59 +273,68 @@ export function useChat(roomId: string) {
       });
 
       socket.addEventListener("message", (event) => {
-        let payload: ServerMessage;
+        void (async () => {
+          let payload: ServerMessage;
 
-        try {
-          payload = JSON.parse(event.data) as ServerMessage;
-        } catch {
-          return;
-        }
-
-        if (payload.type === "DESTROYED") {
-          setTerminalState("destroyed");
-          return;
-        }
-
-        if (payload.type === "EXPIRED") {
-          setTerminalState("expired");
-          return;
-        }
-
-        if (payload.type === "ERROR") {
-          setStatusText(payload.message);
-          window.setTimeout(() => {
-            if (activeRef.current && !terminalRef.current) {
-                setStatusText(formatStatus("active", socketRef.current?.readyState === WebSocket.OPEN ? "CONNECTED" : "DISCONNECTED", 0));
-            }
-          }, 3000);
-          return;
-        }
-
-        if (payload.type === "MESSAGE" || payload.type === "GIF") {
-          console.log(`[FRONTEND RECEIVE] Message ID: ${payload.id}, Sender: ${payload.name}`);
-          
-          if (messageIdsRef.current.has(payload.id)) {
+          try {
+            payload = JSON.parse(event.data) as ServerMessage;
+          } catch {
             return;
           }
-          messageIdsRef.current.add(payload.id);
 
-          const mine = payload.name === guestNameRef.current;
-          
-          console.log(`[FRONTEND STATE UPDATE] Appending message ID: ${payload.id}`);
-          setMessages((prev) =>
-            [
-              ...prev,
-              {
-                id: payload.id,
-                sender: mine ? "You" : payload.name,
-                body: payload.type === "MESSAGE" ? payload.text : payload.gifUrl,
-                at: payload.timestamp,
-                type: (payload.type === "MESSAGE" ? "TEXT" : "GIF") as "TEXT" | "GIF",
-                mine,
-              },
-            ].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
-          );
-        }
+          if (payload.type === "DESTROYED") {
+            setTerminalState("destroyed");
+            return;
+          }
+
+          if (payload.type === "EXPIRED") {
+            setTerminalState("expired");
+            return;
+          }
+
+          if (payload.type === "ERROR") {
+            setStatusText(payload.message);
+            window.setTimeout(() => {
+              if (activeRef.current && !terminalRef.current) {
+                setStatusText(formatStatus("active", socketRef.current?.readyState === WebSocket.OPEN ? "CONNECTED" : "DISCONNECTED", 0));
+              }
+            }, 3000);
+            return;
+          }
+
+          if (payload.type === "MESSAGE" || payload.type === "GIF") {
+            let body = payload.type === "MESSAGE" ? payload.text : payload.gifUrl;
+
+            if (payload.type === "MESSAGE" && encryptionKeyRef.current) {
+              try {
+                body = await decrypt(encryptionKeyRef.current, body);
+              } catch {
+                body = "[encrypted — decryption failed]";
+              }
+            }
+
+            if (messageIdsRef.current.has(payload.id)) {
+              return;
+            }
+            messageIdsRef.current.add(payload.id);
+
+            const mine = payload.name === guestNameRef.current;
+
+            setMessages((prev) =>
+              [
+                ...prev,
+                {
+                  id: payload.id,
+                  sender: mine ? "You" : payload.name,
+                  body,
+                  at: payload.timestamp,
+                  type: (payload.type === "MESSAGE" ? "TEXT" : "GIF") as "TEXT" | "GIF",
+                  mine,
+                },
+              ].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
+            );
+          }
+        })();
       });
 
       socket.addEventListener("close", (event) => {
@@ -428,8 +443,12 @@ export function useChat(roomId: string) {
         return false;
       }
 
-      console.log(`[FRONTEND SEND] Text: ${trimmed}`);
-      socket.send(JSON.stringify({ type: "MESSAGE", text: trimmed, name: guestNameRef.current }));
+      const send = async () => {
+        const key = encryptionKeyRef.current;
+        const payload = key ? await encrypt(key, trimmed) : trimmed;
+        socket.send(JSON.stringify({ type: "MESSAGE", text: payload, name: guestNameRef.current }));
+      };
+      void send();
       return true;
     },
     [connectionState, roomState],
@@ -442,7 +461,6 @@ export function useChat(roomId: string) {
         return false;
       }
 
-      console.log(`[FRONTEND SEND] GIF: ${gifUrl}`);
       socket.send(JSON.stringify({ type: "GIF", gifUrl, name: guestNameRef.current }));
       return true;
     },
